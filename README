@@ -1,0 +1,47 @@
+1.How to compile the program:
+Type in make in the shell. (That is, using the provided Makefile)
+
+2.How to run the program from the shell:
+./application x1 x2 x3 x4 x5
+x1 : key 
+x2 : window size
+x3 : max delay
+x4 : timeout
+x5 : drop rate
+
+Run in different terminals to simulate different users. 
+
+3.How does the program works?
+This program use message queue and signal to implement a very simple version of TCP-style message-passing without many of its core features. 
+
+In this program, sender will use a sliding window mechanism with user input window size value to send out messages. Receiver will send out an ACK for each packet it received with message_id from -1 to its current message_id. Otherwise it will simply ignore the packet. 
+A drop_packet function will be used to simulate packets drop in real life. When receiver received all packets, it will exit and print out the message. Every time sender send out packets it will start an alarm. If alarm time expired, it will resend all unacknowledged packets for MAX_TIMEOUT amount of time. After that if it did not receive all packets it will return to the main function.   
+
+/*********************************
+Note: A blockSig function is added to block and unblock SIGIO and SIGALRM
+Since if we do not block SIGIO, when we go back to main function. SIGIO will keep interrupting and messing up with our main program. 
+
+My handle scheme:
+Using a global variable previous_sender to indicate whether the last role of the process is a sender or a receiver. 
+Last role		Current role		Handle / Discard old messages
+receiver 		sender						Discard
+sender			sender						Discard	
+receiver		receiver					Handle
+sender			receiver					Discard
+
+How to implement handle and discard:
+At the beginning of send_message function. I check how many messages were in the message queue and simply discard those messages since we will have a sender role. And at the beginning of receive_message, I also check how many messages are in the message queue. If last role is receiver then handle them by raising SIGIO. Since when we block SIGIO, multiple SIGIO will merge into one SIGIO. It can help with lagging situation brought by the blocking of signals. Otherwise, signal will be discarded since last role is a sender. 
+
+I also made a small change in create_packet function.
+
+Additional assumption: Do not need to handle corner case. (mentioned on the Moodle). 
+**********************************/
+
+Questions:
+1. What is the effect of having a very short TIMEOUT period and a very long TIMEOUT period?
+When TIMEOUT is very small, sender will resend packets very frequently while ACKs are not actually lost, just smaller than TIMEOUT. In this lab, it will easily make sender think it fails to send out the message to receiver if we have a small value of MAX_TIMEOUT. In real world, it will make network congested. 
+
+2. What is the effect of having a very small window size(e.g., n = 1) and a very large window size?
+If we have a very small window size, It will make sending message very slow, since each packet can only be sent until at least one of packet's ACK in the window has been received. If we have a large window size, the probability of receiving one packet's ACK is higher. If we have a small window size, for example 1, and its ACK got lost during the way. Then all the other packets will stuck, and cannot be sent out until first packet got its ACK.
+
+ 
